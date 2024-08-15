@@ -76,6 +76,7 @@ const preparePaymasterParam = async (account:any, estimateGas: BigNumber) =>{
         innerInput: innerInput,
       }
     );
+    // Returns paymaster params, gas fee, gas limit
     return [paymasterParams, maxFeePerGas, gasLimit];
   };
 
