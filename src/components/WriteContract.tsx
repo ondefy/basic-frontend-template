@@ -9,11 +9,7 @@ import { getSignature } from "../backend/getSignatureApiCall";
 import { BigNumber, ethers } from "ethers";
 const abiCoder = new ethers.utils.AbiCoder();
 
-export function WriteContract() {
-  const [amount, setAmount] = useState('');
-  const { account, getSigner, getProvider, network } = useEthereum();
-
-  const preparePaymasterParam = async (account:any) => {
+const preparePaymasterParam = async (account:any, estimateGas: BigNumber) =>{
     const rpcUrl = process.env.ZKSYNC_RPC_URL ?? "https://sepolia.era.zksync.dev";
     const provider = new Provider(rpcUrl);
     // Below part can be managed in getSignature() as well.
@@ -25,7 +21,6 @@ export function WriteContract() {
       await provider.getTransactionCount(account.address || "") 
     );
     // You can also check for min Nonce from the NonceHolder System contract to fully ensure as ZKsync support arbitrary nonce.
-    // -----------------
     const nonceHolderAddress = "0x0000000000000000000000000000000000008003";
     const nonceHolderAbi = [
       "function getMinNonce(address _address) external view returns (uint256)",
@@ -40,17 +35,15 @@ export function WriteContract() {
     );
     console.log(maxNonce2.toString());
     // -----------------
-    // Get the expiration time. Here signature will be valid upto 60 sec.
+    // Get the expiration time. Here signature will be valid upto 120 sec.
     const currentTimestamp = BigNumber.from(
       (await provider.getBlock("latest")).timestamp
     );
-    const expirationTime = currentTimestamp.add(60);
+    const expirationTime = currentTimestamp.add(120);
     // Get the current gas price.
     const maxFeePerGas = await provider.getGasPrice();
-    // Set the gasLimit. Here, Dapp would know range of gas a function could cost and add 60K top up for paymaster overhead..
-    // Setting 215K (For eg: 150K function gas cost + 65K paymaster overhead)
-    // It will refunded anyways, so not an issue if Dapps set more.
-    const gasLimit = BigNumber.from(215_000);
+    // Add paymaster overhead gas to be on safe side.
+    const gasLimit = estimateGas.add(65000);
     // ------------------------------------------------------------------------------------
     const [paymasterAddress, signature, signerAddress] = await getSignature(
       account.address.toString(),
@@ -60,7 +53,7 @@ export function WriteContract() {
       maxFeePerGas,
       gasLimit
     );
-    console.log(signerAddress);
+    console.log("Signer: " + signerAddress);
     // We encode the extra data to be sent to paymaster
     // Notice how it's not required to provide from, to, maxFeePerGas and gasLimit as per signature above.
     // That's because paymaster will get it from the transaction struct directly to ensure it's the correct user.
@@ -85,12 +78,20 @@ export function WriteContract() {
     );
     return [paymasterParams, maxFeePerGas, gasLimit];
   };
+
+export function WriteContract() {
+  const [amount, setAmount] = useState('');
+  const { account, getSigner, getProvider, network } = useEthereum();
+
+
   const { result: transaction, execute: writeContract, inProgress, error } = useAsync(async () => {
     const contract = new Contract(daiContractConfig.address, daiContractConfig.abi, getSigner());
 
     // random address for testing, replace with contract address that you want to allow to spend your tokens
-    const spender = "0xa1cf087DB965Ab02Fb3CFaCe1f5c63935815f044"
-    const [paymasterParams, maxFeePerGas, gasLimit] = await preparePaymasterParam(account);
+    const spender = "0xa1cf087DB965Ab02Fb3CFaCe1f5c63935815f044";
+
+    const estimateGas = await contract.estimateGas.approve(spender,amount);
+    const [paymasterParams, maxFeePerGas, gasLimit] = await preparePaymasterParam(account, estimateGas);
 
     const tx = await contract.approve(spender, amount,{
       maxFeePerGas,
