@@ -30,7 +30,7 @@ export function WriteContract() {
     <div>
       {network?.unsupported ? (<> Please connect to ZKsync Sepolia Testnet</>) : (<>
       <h3>DAI Approve allowance</h3>
-      <form onSubmit={(e) => { e.preventDefault(); writeContract(); }}>
+      <form onSubmit={(e) => { e.preventDefault(); !inProgress ? (writeContract()) : {} }}>
         <input
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
